@@ -61,7 +61,8 @@ class EqualWeightPortfolio:
         """
         TODO: Complete Task 1 Below
         """
-
+        ew = 1.0 / len(assets)
+        self.portfolio_weights.loc[:, assets] = ew
         """
         TODO: Complete Task 1 Above
         """
@@ -112,7 +113,14 @@ class RiskParityPortfolio:
         """
         TODO: Complete Task 2 Below
         """
+        for i in range(self.lookback, len(df)):
+            # 取 lookback 天資料計算年化波動 (或日波動亦可，只是比例問題)
+            window_ret = df_returns[assets].iloc[i - self.lookback : i]
+            vol = window_ret.std()
+            inv_vol = 1.0 / vol.replace(0, np.nan)      # 避免除以 0
+            weights = inv_vol / inv_vol.sum()            # 正規化
 
+            self.portfolio_weights.loc[df.index[i], assets] = weights.values
         """
         TODO: Complete Task 2 Above
         """
@@ -186,9 +194,26 @@ class MeanVariancePortfolio:
                 """
 
                 # Sample Code: Initialize Decision w and the Objective
-                # NOTE: You can modify the following code
-                w = model.addMVar(n, name="w", ub=1)
-                model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+                # # NOTE: You can modify the following code
+                # w = model.addMVar(n, name="w", ub=1)
+                # model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+                w = model.addMVar(n, lb=0, name="w")
+
+                # Budget constraint  Σ w_i = 1
+                model.addConstr(w.sum() == 1, name="budget")
+
+                # 建立 quadratic expression ½ γ wᵀΣw（但 Gurobi 目標要全寫作 maximise）
+                quad = gp.QuadExpr()
+                for p in range(n):
+                    for q in range(n):
+                        if Sigma[p, q] != 0:
+                            quad += Sigma[p, q] * w[p] * w[q]
+
+                # 線性報酬 μᵀw
+                lin = gp.LinExpr(mu @ w)
+
+                # 最大化 μᵀw − (γ/2)wᵀΣw
+                model.setObjective(lin - 0.5 * gamma * quad, gp.GRB.MAXIMIZE)
 
                 """
                 TODO: Complete Task 3 Above
