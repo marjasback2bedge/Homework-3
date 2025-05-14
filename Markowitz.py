@@ -210,7 +210,7 @@ class MeanVariancePortfolio:
                             quad += Sigma[p, q] * w[p] * w[q]
 
                 # 線性報酬 μᵀw
-                lin = gp.LinExpr(mu @ w)
+                lin = gp.quicksum(mu[i] * w[i] for i in range(n))
 
                 # 最大化 μᵀw − (γ/2)wᵀΣw
                 model.setObjective(lin - 0.5 * gamma * quad, gp.GRB.MAXIMIZE)
