@@ -113,12 +113,11 @@ class RiskParityPortfolio:
         """
         TODO: Complete Task 2 Below
         """
-        for i in range(self.lookback, len(df)):
-            # 取 lookback 天資料計算年化波動 (或日波動亦可，只是比例問題)
+        for i in range(self.lookback + 1, len(df)):
             window_ret = df_returns[assets].iloc[i - self.lookback : i]
             vol = window_ret.std()
-            inv_vol = 1.0 / vol.replace(0, np.nan)      # 避免除以 0
-            weights = inv_vol / inv_vol.sum()            # 正規化
+            inv_vol = 1.0 / vol.replace(0, np.nan)
+            weights = inv_vol / inv_vol.sum()
 
             self.portfolio_weights.loc[df.index[i], assets] = weights.values
         """
