@@ -9,6 +9,7 @@ import quantstats as qs
 import gurobipy as gp
 import warnings
 import argparse
+import scipy
 
 """
 Project Setup
@@ -69,6 +70,56 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+        reb_freq   = 21      # 月頻重平衡
+        mom_win    = 126     # 6 個月動能視窗
+        vol_win    = 63      # 3 個月波動視窗
+        top_k      = 3       # 取前 3 名
+        target_vol = 0.08    # 年化 8 %
+
+        # 200 日 MA 濾網（用於判斷是否空倉）
+        spy_ma200 = self.price["SPY"].rolling(200).mean()
+
+        for i in range(mom_win + 1, len(self.price)):
+            if (i - (mom_win + 1)) % reb_freq:        # 非重平衡日跳過
+                continue
+
+            idx = self.price.index[i]
+
+            # ── 絕對動能濾網：SPY 跌破 200MA ⇒ 全現金 ──
+            if self.price.loc[idx, "SPY"] < spy_ma200.loc[idx]:
+                self.portfolio_weights.loc[idx, assets] = 0
+                continue
+
+            # ── 計算 6M 動能 ──
+            momentum = (1 + self.returns[assets].iloc[i - mom_win : i]).prod() - 1
+
+            # 動能為正的前 top_k 名
+            winners = momentum[momentum > 0].sort_values(ascending=False).head(top_k)
+            if winners.empty:                           # 全為負 ⇒ 空倉
+                self.portfolio_weights.loc[idx, assets] = 0
+                continue
+
+            # ── 逆波動權重 ──
+            vols = (
+                self.returns[winners.index]
+                .iloc[i - vol_win : i]
+                .std()
+                .replace(0, np.nan)
+            )
+            inv_vol = 1 / vols
+            base_w  = inv_vol / inv_vol.sum()           # Σ w = 1
+
+            # ── 目標波動 (vol-targeting) ──
+            cov = self.returns[winners.index].iloc[i - vol_win : i].cov().values
+            port_sigma = np.sqrt(base_w.values @ cov @ base_w.values.T) * np.sqrt(252)
+
+            scale = min(1.0, target_vol / port_sigma)   # 不槓桿，只縮小
+            final_w = base_w * scale                    # Σ w ≤ 1
+
+            # 寫回 DataFrame
+            row = pd.Series(0, index=assets)
+            row[winners.index] = final_w.values
+            self.portfolio_weights.loc[idx, assets] = row  
 
         """
         TODO: Complete Task 4 Above
